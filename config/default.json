@@ -9,7 +9,7 @@
     "default": 10,
     "max": 50
   },
-  "mongodb": "mongodb://admin:password@localhost:27017/token-gate?authSource=admin",
+  "mongodb": "mongodb://admin:password123@localhost:27017/feathers_db?authSource=admin",
   "authentication": {
     "entity": "user",
     "service": "users",
