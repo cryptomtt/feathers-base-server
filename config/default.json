@@ -31,8 +31,6 @@
       "usernameField": "email",
       "passwordField": "password"
     },
-    "privy": {
-      "projectId": "cm41jxqk4058o38i6yzgcnyy9"
-    }
+    "privyProjectId": "cm41jxqk4058o38i6yzgcnyy9"
   }
 }
