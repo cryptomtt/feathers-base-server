@@ -3,7 +3,7 @@ import { HookContext as FeathersHookContext, NextFunction } from '@feathersjs/fe
 import { Application as FeathersApplication } from '@feathersjs/koa'
 import { ApplicationConfiguration } from './configuration'
 
-import { User } from './services/users/users'
+import { User } from './services/users/users.schema'
 
 export type { NextFunction }
 

@@ -9,7 +9,7 @@ import type { Application } from './declarations'
 import { logError } from './hooks/log-error'
 import { mongodb } from './mongodb'
 import { authentication } from './authentication'
-import { services } from './services/index'
+import { services } from './services'
 import { channels } from './channels'
 
 const app: Application = koa(feathers())
