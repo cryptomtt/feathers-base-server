@@ -13,10 +13,11 @@
   "authentication": {
     "entity": "user",
     "service": "users",
-    "secret": "kmY2XUIg5DF/E20Snl0vMN7xBoW94OyU",
+    "secret": "your-secret-key",
     "authStrategies": [
       "jwt",
-      "local"
+      "local",
+      "privy"
     ],
     "jwtOptions": {
       "header": {
@@ -29,6 +30,9 @@
     "local": {
       "usernameField": "email",
       "passwordField": "password"
+    },
+    "privy": {
+      "projectId": "cm41jxqk4058o38i6yzgcnyy9"
     }
   }
 }
