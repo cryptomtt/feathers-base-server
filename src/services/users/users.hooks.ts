@@ -11,6 +11,15 @@ import {
   setDefaultData,
   validatePatchData
 } from './users.hooks.functions'
+import { createRedisCache } from '../../hooks/cache.hook'
+import { invalidateCache } from '../../hooks/cache-invalidation.hook'
+
+// Initialize cache hooks with excluded paths
+const cache = createRedisCache({
+  ttl: 3600,
+  prefix: 'feathers:cache:',
+  excludePaths: ['authentication', 'authManagement']  // Add any other auth-related paths
+})
 
 export default {
   around: {
@@ -26,8 +35,8 @@ export default {
   },
   before: {
     all: [],
-    find: [],
-    get: [],
+    find: [cache.before],
+    get: [cache.before],
     create: [
       setDefaultData,
       setCreatedAt,
@@ -40,9 +49,15 @@ export default {
     remove: []
   },
   after: {
-    all: []
+    all: [],
+    find: [cache.after],
+    get: [cache.after],
+    create: [invalidateCache()],
+    patch: [invalidateCache()],
+    remove: [invalidateCache()]
   },
   error: {
-    all: []
+    all: [],
+    get: [cache.error]
   }
-} 
+}

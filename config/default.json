@@ -30,7 +30,13 @@
     "local": {
       "usernameField": "email",
       "passwordField": "password"
-    },
-    "privyProjectId": "cm41jxqk4058o38i6yzgcnyy9"
-  }
+    }
+  },
+  "redis": {
+    "url": "redis://:redis123@localhost:6379",
+    "database": 0,
+    "prefix": "feathers:cache:",
+    "ttl": 3600
+  },
+  "privyProjectId": "cm41jxqk4058o38i6yzgcnyy9"
 }
