@@ -8,6 +8,7 @@ import { configurationValidator } from './configuration'
 import type { Application } from './declarations'
 import { logError } from './hooks/log-error'
 import { mongodb } from './mongodb'
+import { redis } from './redis'
 import { authentication } from './authentication'
 import { services } from './services'
 import { channels } from './channels'
@@ -39,6 +40,7 @@ app.configure(socketio({
   }
 }));
 app.configure(mongodb)
+app.configure(redis)
 app.configure(authentication)
 app.configure(services)
 app.configure(channels)

@@ -4,12 +4,21 @@ import { Application as FeathersApplication } from '@feathersjs/koa'
 import { ApplicationConfiguration } from './configuration'
 
 import { User } from './services/users/users.schema'
+import type { RedisClientType, RedisDefaultModules } from 'redis'
 
 export type { NextFunction }
 
 // The types for app.get(name) and app.set(name)
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
-export interface Configuration extends ApplicationConfiguration {}
+export interface Configuration extends ApplicationConfiguration {
+  redisClient: RedisClientType<RedisDefaultModules>
+  redis: {
+    url: string
+    database: number
+    prefix: string
+    ttl: number
+  }
+}
 
 // A mapping of service names to types. Will be extended in service files.
 // eslint-disable-next-line @typescript-eslint/no-empty-interface

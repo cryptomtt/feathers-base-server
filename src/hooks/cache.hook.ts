@@ -1,181 +1,104 @@
 import { HookContext } from '@feathersjs/feathers'
-import { createClient } from 'redis'
-import { NotFound } from '@feathersjs/errors'
-import type { ApplicationConfiguration } from '../configuration'
+import { logger } from '../logger'
 
 interface CacheOptions {
-    ttl?: number
-    prefix?: string
-    excludePaths?: string[]
+  ttl: number
+  prefix: string
+  excludePaths: string[]
 }
 
-export const createRedisCache = (options: CacheOptions = {}) => {
-    let redisClient: ReturnType<typeof createClient> | null = null
-    let isConnecting = false
+export const createRedisCache = (options: CacheOptions) => {
+  return {
+    before: async (context: HookContext) => {
+      if (context.method !== 'find' && context.method !== 'get') return context
+      if (options.excludePaths.includes(context.path)) {
+        logger.debug(`[Cache] Skipping cache for excluded path: ${context.path}`)
+        return context
+      }
 
-    const getRedisClient = async (app: any) => {
-        if (redisClient?.isOpen) {
-            return redisClient
+      const client = context.app.get('redisClient')
+      const key = `${options.prefix}${context.path}:${context.method}:${JSON.stringify(context.params.query || {})}`
+      
+      logger.debug(`[Cache] Checking cache for key: ${key}`, {
+        service: context.path,
+        method: context.method,
+        query: context.params.query
+      })
+
+      try {
+        const cached = await client.get(key)
+        if (cached) {
+          logger.info(`[Cache] Cache hit for ${context.path}:${context.method}`, {
+            key,
+            dataSize: cached.length
+          })
+          context.result = JSON.parse(cached)
+          return context
         }
 
-        if (isConnecting) {
-            return null
-        }
+        logger.debug(`[Cache] Cache miss for ${context.path}:${context.method}`, {
+          key,
+          query: context.params.query
+        })
+      } catch (error) {
+        logger.error('[Cache] Error reading from cache:', {
+          error,
+          key,
+          service: context.path,
+          method: context.method
+        })
+      }
 
-        try {
-            isConnecting = true
-            const config = app.get('redis') as ApplicationConfiguration['redis']
+      return context
+    },
 
-            // Create Redis URL with authentication
-            const redisUrl = new URL(config.url || 'redis://localhost:6379')
-            redisUrl.password = encodeURIComponent(config.password || 'redis123')
+    after: async (context: HookContext) => {
+      if (context.method !== 'find' && context.method !== 'get') return context
+      if (options.excludePaths.includes(context.path)) return context
 
-            console.log('[CacheHook] Connecting to Redis with URL:', redisUrl.toString())
+      const client = context.app.get('redisClient')
+      const key = `${options.prefix}${context.path}:${context.method}:${JSON.stringify(context.params.query || {})}`
+      const data = JSON.stringify(context.result)
 
-            redisClient = createClient({
-                url: redisUrl.toString(),
-                socket: {
-                    reconnectStrategy: false
-                }
-            })
+      try {
+        logger.debug(`[Cache] Attempting to cache result for ${key}`, {
+          dataSize: data.length,
+          ttl: options.ttl
+        })
 
-            redisClient.on('error', (err) => {
-                console.error('[CacheHook] Redis Client Error:', err)
-                if (redisClient?.isOpen) {
-                    redisClient.quit().catch(console.error)
-                }
-                redisClient = null
-            })
+        const startTime = Date.now()
+        await client.set(key, data, {
+          EX: options.ttl
+        })
+        const duration = Date.now() - startTime
 
-            await redisClient.connect()
+        logger.info(`[Cache] Successfully cached result`, {
+          key,
+          dataSize: data.length,
+          ttl: options.ttl,
+          duration: `${duration}ms`
+        })
+      } catch (error) {
+        logger.error('[Cache] Failed to cache result:', {
+          error,
+          key,
+          service: context.path,
+          method: context.method,
+          dataSize: data.length
+        })
+      }
 
-            // Test connection
-            await redisClient.ping()
-            console.log('[CacheHook] Redis Client Connected and Ping successful')
+      return context
+    },
 
-            return redisClient
-        } catch (error) {
-            console.error('[CacheHook] Redis Connection Error:', error)
-            if (redisClient) {
-                try {
-                    await redisClient.quit()
-                } catch (quitError) {
-                    console.error('[CacheHook] Error while closing Redis connection:', quitError)
-                }
-            }
-            redisClient = null
-            return null
-        } finally {
-            isConnecting = false
-        }
+    error: async (context: HookContext) => {
+      logger.error(`[Cache] Error in ${context.path}:${context.method}:`, {
+        error: context.error,
+        service: context.path,
+        method: context.method,
+        query: context.params.query
+      })
+      return context
     }
-
-    const generateKey = (context: HookContext) => {
-        const config = context.app.get('redis') as ApplicationConfiguration['redis']
-        const prefix = options.prefix || config.prefix || 'feathers:cache:'
-        const { method, path, id, params } = context
-        const query = params.query ? JSON.stringify(params.query) : ''
-        return `${prefix}${path}:${method}:${id || ''}:${query}`
-    }
-
-    const getCacheTTL = (context: HookContext): number => {
-        const config = context.app.get('redis') as ApplicationConfiguration['redis']
-        return options.ttl || config.ttl || 3600
-    }
-
-    const shouldSkipCache = (context: HookContext): boolean => {
-        const excludedPaths = [
-            'authentication',
-            ...(options.excludePaths || [])
-        ]
-        return excludedPaths.includes(context.path)
-    }
-
-    return {
-        before: async (context: HookContext) => {
-            if (!['get', 'find'].includes(context.method) || shouldSkipCache(context)) {
-                return context
-            }
-
-            try {
-                const redis = await getRedisClient(context.app)
-                if (!redis) {
-                    console.log('[CacheHook] Skipping cache - Redis not available')
-                    return context
-                }
-
-                const key = generateKey(context)
-                const cached = await redis.get(key)
-
-                if (cached) {
-                    const parsedCache = JSON.parse(cached)
-                    console.log('[CacheHook] Cache hit:', {
-                        key,
-                        timestamp: new Date().toISOString(),
-                        resultType: parsedCache ? typeof parsedCache : 'null',
-                        isArray: Array.isArray(parsedCache),
-                        dataLength: Array.isArray(parsedCache) ? parsedCache.length : 1
-                    })
-                    context.result = parsedCache
-                    return context
-                }
-
-                console.log('[CacheHook] Cache miss:', {
-                    key,
-                    timestamp: new Date().toISOString()
-                })
-                context._cacheKey = key
-            } catch (error) {
-                console.error('[CacheHook] Cache read error:', error)
-            }
-
-            return context
-        },
-
-        after: async (context: HookContext) => {
-            if (!['get', 'find'].includes(context.method) || shouldSkipCache(context)) {
-                return context
-            }
-
-            try {
-                const redis = await getRedisClient(context.app)
-                if (!redis) {
-                    return context
-                }
-
-                const key = context._cacheKey
-                if (key && context.result) {
-                    console.log('[CacheHook] Caching result for:', key)
-                    await redis.set(key, JSON.stringify(context.result), {
-                        EX: getCacheTTL(context)
-                    })
-                }
-            } catch (error) {
-                console.error('[CacheHook] Cache write error:', error)
-            }
-
-            return context
-        },
-
-        error: async (context: HookContext) => {
-            if (context.error instanceof NotFound && !shouldSkipCache(context)) {
-                try {
-                    const redis = await getRedisClient(context.app)
-                    if (!redis) {
-                        return context
-                    }
-
-                    const key = context._cacheKey
-                    if (key) {
-                        await redis.set(key, JSON.stringify(null), {
-                            EX: getCacheTTL(context)
-                        })
-                    }
-                } catch (error) {
-                    console.error('[CacheHook] Cache error handling error:', error)
-                }
-            }
-            return context
-        }
-    }
+  }
 }
